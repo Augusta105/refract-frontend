@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Navbar, Footer } from "@/components/layout";
 import { Container, Card, Badge, Input, Button, Skeleton } from "@/components/ui";
 import { WalletButton } from "@/components/wallet";
@@ -12,6 +13,8 @@ import { ApiUnreachableError } from "@/lib/api/client";
 import { formatUsd, toStroops } from "@/lib/format";
 import { truncateAddress } from "@/lib/wallet/WalletProvider";
 import { signAndSubmit } from "@/lib/wallet/signAndSubmit";
+import { useCoverQueryParams } from "@/hooks/useCoverQueryParams";
+import { parseCoverQueryParams } from "@/lib/coverQueryParams";
 
 const RISK_TAG_COLORS: Record<string, string> = {
   low: "#10b981",
@@ -26,6 +29,7 @@ const QUICK_AMOUNTS = [1_000, 5_000, 10_000, 25_000];
 
 export default function CoverPage() {
   const wallet = useWallet();
+  const searchParams = useSearchParams();
   const { data: coverageTypes, loading: typesLoading, error: typesError, isFixture } = useCoverageTypes();
   const { minCoverage: chainMinCoverage, maxCoverage: chainMaxCoverage } = useCoverageBounds();
 
@@ -41,6 +45,26 @@ export default function CoverPage() {
     | { status: "error"; message: string }
   >({ status: "idle" });
   const radioRefs = useRef<Record<number, HTMLButtonElement | null>>({});
+  const initializedRef = useRef(false);
+
+  // Initialize from URL search params on mount
+  useEffect(() => {
+    if (initializedRef.current) return;
+    const parsed = parseCoverQueryParams(searchParams);
+    if (parsed.type !== undefined) setSelectedType(parsed.type);
+    if (parsed.amount !== undefined) setCoverageAmount(parsed.amount);
+    if (parsed.duration !== undefined) setDurationDays(parsed.duration);
+    if (parsed.flight !== undefined) setFlightNumber(parsed.flight);
+    initializedRef.current = true;
+  }, [searchParams]);
+
+  // Sync state to URL params (debounced router.replace)
+  useCoverQueryParams({
+    type: selectedType,
+    amount: coverageAmount,
+    duration: durationDays,
+    flight: flightNumber,
+  });
 
   const ct = coverageTypes?.[selectedType];
 
