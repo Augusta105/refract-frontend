@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Navbar, Footer } from "@/components/layout";
-import { Container, Card, Badge, Input, Button, Skeleton } from "@/components/ui";
+import { Container, Card, Badge, Input, Button, Skeleton, AsyncState } from "@/components/ui";
 import { WalletButton } from "@/components/wallet";
 import { useWallet } from "@/lib/wallet/WalletProvider";
 import { useCoverageTypes } from "@/hooks/useCoverageTypes";
@@ -175,94 +175,97 @@ export default function CoverPage() {
               <div>
                 <div className="mb-3 text-[11px] uppercase tracking-wide text-pm-text/40">1. Select Coverage Type</div>
 
-                {typesError && (
-                  <Card className="border-pm-red/30 !bg-pm-red/[0.04]">
-                    <p className="text-sm text-pm-red">Couldn&apos;t load coverage types: {typesError}</p>
-                  </Card>
-                )}
-
-                {typesLoading && (
-                  <div className="flex flex-col gap-2.5" role="status" aria-label="Loading coverage types">
-                    {Array.from({ length: 5 }).map((_, i) => (
-                      <Skeleton key={i} height={72} rounded="md" />
-                    ))}
-                  </div>
-                )}
-
-                {coverageTypes && (
-                  <div
-                    className="flex flex-col gap-2.5"
-                    role="radiogroup"
-                    aria-label="Coverage type"
-                    onKeyDown={(e) => {
-                      if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
-                      e.preventDefault();
-                      const ids = coverageTypes.map((t) => t.id);
-                      const currentIndex = ids.indexOf(selectedType);
-                      let nextIndex = currentIndex;
-                      if (e.key === "ArrowDown") nextIndex = (currentIndex + 1) % ids.length;
-                      if (e.key === "ArrowUp") nextIndex = (currentIndex - 1 + ids.length) % ids.length;
-                      if (e.key === "Home") nextIndex = 0;
-                      if (e.key === "End") nextIndex = ids.length - 1;
-                      const nextId = ids[nextIndex];
-                      setSelectedType(nextId);
-                      setSubmission({ status: "idle" });
-                      radioRefs.current[nextId]?.focus();
-                    }}
-                  >
-                    {coverageTypes.map((type) => {
-                      const active = selectedType === type.id;
-                      return (
-                        <button
-                          key={type.id}
-                          ref={(el) => {
-                            radioRefs.current[type.id] = el;
-                          }}
-                          type="button"
-                          role="radio"
-                          aria-checked={active}
-                          tabIndex={active ? 0 : -1}
-                          onClick={() => {
-                            setSelectedType(type.id);
-                            setSubmission({ status: "idle" });
-                          }}
-                          className="w-full rounded-[10px] border px-5 py-[18px] text-left transition-all"
-                          style={{
-                            background: active ? "rgba(139,92,246,0.1)" : "rgba(255,255,255,0.025)",
-                            borderColor: active ? "rgba(139,92,246,0.4)" : "rgba(255,255,255,0.06)",
-                            boxShadow: active ? "0 0 20px rgba(139,92,246,0.1)" : "none",
-                          }}
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-3">
-                              <span className="text-[22px]" aria-hidden="true">{type.icon}</span>
-                              <div>
-                                <div className="mb-0.5 text-sm font-semibold text-pm-text">{type.name}</div>
-                                <div className="text-xs text-pm-text/40">{type.trigger}</div>
+                <AsyncState
+                  loading={typesLoading}
+                  error={typesError}
+                  loadingRender={
+                    <div className="flex flex-col gap-2.5" role="status" aria-label="Loading coverage types">
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <Skeleton key={i} height={72} rounded="md" />
+                      ))}
+                    </div>
+                  }
+                  errorRender={(err) => (
+                    <Card className="border-pm-red/30 !bg-pm-red/[0.04]">
+                      <p className="text-sm text-pm-red">Couldn&apos;t load coverage types: {err}</p>
+                    </Card>
+                  )}
+                >
+                  {coverageTypes && (
+                    <div
+                      className="flex flex-col gap-2.5"
+                      role="radiogroup"
+                      aria-label="Coverage type"
+                      onKeyDown={(e) => {
+                        if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
+                        e.preventDefault();
+                        const ids = coverageTypes.map((t) => t.id);
+                        const currentIndex = ids.indexOf(selectedType);
+                        let nextIndex = currentIndex;
+                        if (e.key === "ArrowDown") nextIndex = (currentIndex + 1) % ids.length;
+                        if (e.key === "ArrowUp") nextIndex = (currentIndex - 1 + ids.length) % ids.length;
+                        if (e.key === "Home") nextIndex = 0;
+                        if (e.key === "End") nextIndex = ids.length - 1;
+                        const nextId = ids[nextIndex];
+                        setSelectedType(nextId);
+                        setSubmission({ status: "idle" });
+                        radioRefs.current[nextId]?.focus();
+                      }}
+                    >
+                      {coverageTypes.map((type) => {
+                        const active = selectedType === type.id;
+                        return (
+                          <button
+                            key={type.id}
+                            ref={(el) => {
+                              radioRefs.current[type.id] = el;
+                            }}
+                            type="button"
+                            role="radio"
+                            aria-checked={active}
+                            tabIndex={active ? 0 : -1}
+                            onClick={() => {
+                              setSelectedType(type.id);
+                              setSubmission({ status: "idle" });
+                            }}
+                            className="w-full rounded-[10px] border px-5 py-[18px] text-left transition-all"
+                            style={{
+                              background: active ? "rgba(139,92,246,0.1)" : "rgba(255,255,255,0.025)",
+                              borderColor: active ? "rgba(139,92,246,0.4)" : "rgba(255,255,255,0.06)",
+                              boxShadow: active ? "0 0 20px rgba(139,92,246,0.1)" : "none",
+                            }}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-3">
+                                <span className="text-[22px]" aria-hidden="true">{type.icon}</span>
+                                <div>
+                                  <div className="mb-0.5 text-sm font-semibold text-pm-text">{type.name}</div>
+                                  <div className="text-xs text-pm-text/40">{type.trigger}</div>
+                                </div>
+                              </div>
+                              <div className="shrink-0 text-right">
+                                <div
+                                  className="mb-0.5 text-[11px] font-semibold uppercase"
+                                  style={{ color: RISK_TAG_COLORS[type.riskLevel] }}
+                                >
+                                  {type.riskLevel}
+                                </div>
+                                <div className="text-[13px] font-bold text-pm-violet">{type.baseRatePct}%/yr</div>
                               </div>
                             </div>
-                            <div className="shrink-0 text-right">
-                              <div
-                                className="mb-0.5 text-[11px] font-semibold uppercase"
-                                style={{ color: RISK_TAG_COLORS[type.riskLevel] }}
-                              >
-                                {type.riskLevel}
+                            {active && (
+                              <div className="mt-3 flex flex-wrap gap-2 border-t border-pm-violet/15 pt-3">
+                                <Badge tone="violet">Auto-settle</Badge>
+                                <Badge tone="violet">No form required</Badge>
+                                <Badge tone="safe">On-chain</Badge>
                               </div>
-                              <div className="text-[13px] font-bold text-pm-violet">{type.baseRatePct}%/yr</div>
-                            </div>
-                          </div>
-                          {active && (
-                            <div className="mt-3 flex flex-wrap gap-2 border-t border-pm-violet/15 pt-3">
-                              <Badge tone="violet">Auto-settle</Badge>
-                              <Badge tone="violet">No form required</Badge>
-                              <Badge tone="safe">On-chain</Badge>
-                            </div>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </AsyncState>
               </div>
 
               {/* Configuration */}
