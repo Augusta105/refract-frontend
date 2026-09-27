@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Navbar, Footer } from "@/components/layout";
 import { Container, Card, Badge, Button, Skeleton } from "@/components/ui";
 import { WalletButton } from "@/components/wallet";
@@ -10,6 +11,7 @@ import { formatUsd, fromStroops } from "@/lib/format";
 import { stellarExpertTxUrl } from "@/lib/stellar";
 import type { Policy } from "@/lib/api/policies";
 import type { ClaimRecord } from "@/lib/api/claims";
+import { PolicyCertificateModal, type PolicyCertificateData } from "@/components/PolicyCertificate";
 
 const COVERAGE_ICONS = ["🪙", "📉", "🛡️", "🔐", "✈️"];
 const COVERAGE_COLORS = ["#8b5cf6", "#f59e0b", "#10b981", "#ef4444", "#06b6d4"];
@@ -33,6 +35,7 @@ export default function DashboardPage() {
   const address = wallet.status === "connected" ? wallet.address : null;
   const { data: policies, loading, error, isFixture } = useHolderPolicies(address);
   const claims = useClaims(address, policies);
+  const [selectedCert, setSelectedCert] = useState<PolicyCertificateData | null>(null);
 
   const summary = policies
     ? {
@@ -163,7 +166,7 @@ export default function DashboardPage() {
                                 <div className="font-mono text-[11px] text-pm-text/35">{policy.id}</div>
                               </div>
                             </div>
-                            <div className="flex items-center gap-6 sm:justify-end">
+                            <div className="flex flex-wrap items-center gap-4 sm:justify-end">
                               <div className="text-right">
                                 <div className="text-[11px] uppercase tracking-wide text-pm-text/35">Coverage</div>
                                 <div className="text-sm font-semibold text-pm-text">{formatUsd(fromStroops(policy.coverageAmount))}</div>
@@ -176,6 +179,27 @@ export default function DashboardPage() {
                                   {new Date(policy.expiresAt * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                                 </div>
                               </div>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setSelectedCert({
+                                    id: policy.id,
+                                    holder: policy.holder,
+                                    coverageType: policy.coverageType,
+                                    coverageTypeName: policy.coverageTypeName,
+                                    coverageAmount: policy.coverageAmount,
+                                    premium: policy.premium,
+                                    durationDays: policy.durationDays,
+                                    expiresAt: policy.expiresAt,
+                                    createdAt: policy.createdAt,
+                                    demo: isFixture,
+                                  })
+                                }
+                                className="rounded border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-xs font-semibold text-pm-text transition-colors hover:border-pm-violet/40 hover:bg-pm-violet/10"
+                                title="View certificate"
+                              >
+                                📄 Certificate
+                              </button>
                             </div>
                           </div>
                         </Card>
@@ -184,6 +208,12 @@ export default function DashboardPage() {
                   </div>
                 )}
               </section>
+
+              <PolicyCertificateModal
+                isOpen={!!selectedCert}
+                onClose={() => setSelectedCert(null)}
+                policy={selectedCert}
+              />
 
               {/* Claims / payout history */}
               <section aria-labelledby="claims-heading">

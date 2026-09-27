@@ -15,6 +15,7 @@ import { truncateAddress } from "@/lib/wallet/WalletProvider";
 import { signAndSubmit } from "@/lib/wallet/signAndSubmit";
 import { useCoverQueryParams } from "@/hooks/useCoverQueryParams";
 import { parseCoverQueryParams } from "@/lib/coverQueryParams";
+import { PolicyCertificateModal } from "@/components/PolicyCertificate";
 
 const RISK_TAG_COLORS: Record<string, string> = {
   low: "#10b981",
@@ -44,6 +45,7 @@ export default function CoverPage() {
     | { status: "success"; result: BuyPolicyResponse; demo: boolean; txHash?: string }
     | { status: "error"; message: string }
   >({ status: "idle" });
+  const [showCert, setShowCert] = useState(false);
   const radioRefs = useRef<Record<number, HTMLButtonElement | null>>({});
   const initializedRef = useRef(false);
 
@@ -383,15 +385,34 @@ export default function CoverPage() {
                       </div>
                     )}
                   </dl>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    block
-                    className="mt-5"
-                    onClick={() => setSubmission({ status: "idle" })}
-                  >
-                    Buy another policy
-                  </Button>
+                  <div className="mt-5 flex flex-col gap-2">
+                    <Button
+                      type="button"
+                      variant="primary"
+                      block
+                      onClick={() => setShowCert(true)}
+                    >
+                      📄 View / Print Certificate
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      block
+                      onClick={() => setSubmission({ status: "idle" })}
+                    >
+                      Buy another policy
+                    </Button>
+                  </div>
+
+                  <PolicyCertificateModal
+                    isOpen={showCert}
+                    onClose={() => setShowCert(false)}
+                    policy={{
+                      ...submission.result.policy,
+                      txHash: submission.txHash,
+                      demo: submission.demo,
+                    }}
+                  />
                 </Card>
               ) : (
                 <Card padding="md">
