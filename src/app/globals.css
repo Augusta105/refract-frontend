@@ -53,6 +53,19 @@
   --pm-r:    8px;
   --pm-r-lg: 16px;
   --pm-r-xl: 24px;
+
+  /* Motion tokens — named durations & easings (single source of truth).
+     All CSS animations/transitions should reference these instead of
+     scattering literal durations across files. */
+  --pm-duration-fast:   0.15s;
+  --pm-duration-base:   0.2s;
+  --pm-duration-slow:   0.4s;
+  --pm-duration-slower: 0.5s;
+  --pm-duration-spin:   0.6s;
+  --pm-duration-pulse:  2s;
+  --pm-ease-standard:   ease;
+  --pm-ease-out:        ease-out;
+  --pm-ease-linear:     linear;
 }
 
 /* ── Base ────────────────────────────────────────────────────────────────── */
@@ -114,7 +127,7 @@ body {
   cursor: pointer;
   border: none;
   outline: none;
-  transition: all 0.2s;
+  transition: all var(--pm-duration-base);
   white-space: nowrap;
 }
 
@@ -148,7 +161,7 @@ body {
   padding: 10px 14px;
   font-size: 14px;
   outline: none;
-  transition: border-color 0.2s;
+  transition: border-color var(--pm-duration-base);
 }
 .pm-input:focus { border-color: rgb(var(--pm-violet)); }
 .pm-input::placeholder { color: rgb(var(--pm-muted-2)); }
@@ -182,25 +195,62 @@ body {
 .risk-heat-medium { background: linear-gradient(135deg, rgb(var(--pm-risk) / 0.08), transparent 70%); }
 .risk-heat-high   { background: linear-gradient(135deg, rgb(var(--pm-danger) / 0.08),  transparent 70%); }
 
+/* ── Motion ────────────────────────────────────────────────────────────────
+   Documented motion policy for Refract.
+
+   Decision (issue #37): framer-motion is NOT adopted. It was a declared
+   production dependency with zero imports, so it has been removed from
+   package.json and the README stack. All motion is expressed with the CSS
+   keyframes/transitions below, driven by the named tokens in :root.
+
+   Reduced-motion policy (single documented rule):
+   - JS side: `usePrefersReducedMotion` (src/hooks/usePrefersReducedMotion.ts)
+     is the single source of truth for components that need to branch in JS.
+   - CSS side: the `@media (prefers-reduced-motion: reduce)` override at the
+     bottom of this file is the belt-and-braces fallback that neutralises
+     every animation/transition declared here.
+   No component may animate without going through one of these two paths.
+   Motion is never required to convey state (e.g. the Counter value is
+   readable instantly under reduced motion).
+   ─────────────────────────────────────────────────────────────────────────── */
+
 /* ── Animations ──────────────────────────────────────────────────────────── */
-/* `fadeUp` is defined once here; tailwind.config.ts references this keyframe
- * via `animation.fade-up` instead of redeclaring it. */
+/* `fadeUp` is defined once here (issue #39); tailwind.config.ts references
+ * this keyframe via `animation.fade-up` instead of redeclaring it, so this
+ * file is the single source of truth for the animation. */
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(16px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.animate-fade-up { animation: fadeUp 0.4s ease forwards; }
+.animate-fade-up { animation: fadeUp var(--pm-duration-slow) var(--pm-ease-standard) forwards; }
 
 @keyframes shieldPulse {
   0%   { box-shadow: 0 0 0 0 rgb(var(--pm-violet) / 0.4); }
   70%  { box-shadow: 0 0 0 16px rgb(var(--pm-violet) / 0); }
   100% { box-shadow: 0 0 0 0 rgb(var(--pm-violet) / 0); }
 }
-.pm-glow { animation: shieldPulse 2s infinite; }
+.pm-glow { animation: shieldPulse var(--pm-duration-pulse) infinite; }
 
-@keyframes orbit {
-  from { transform: rotate(0deg) translateX(120px) rotate(0deg); }
-  to   { transform: rotate(360deg) translateX(120px) rotate(-360deg); }
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.pm-spin { animation: spin var(--pm-duration-spin) var(--pm-ease-linear) infinite; }
+
+/* pmShimmer supersedes the old `shimmer` keyframes that used to live in
+   tailwind.config.ts (issue #39) — one shimmer source only. */
+@keyframes pmShimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.pm-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--pm-surface-2) 25%,
+    var(--pm-surface-3) 50%,
+    var(--pm-surface-2) 75%
+  );
+  background-size: 200% 100%;
+  animation: pmShimmer 1.4s var(--pm-ease-linear) infinite;
 }
 
 /* ── Coverage card ───────────────────────────────────────────────────────── */
@@ -291,4 +341,3 @@ input:focus-visible,
 
 /* ── Loading skeleton ────────────────────────────────────────────────────── */
 
-/* … truncated 1112 chars — edit only what you need near the top … */
