@@ -1,5 +1,7 @@
 "use client";
 
+import { useMemo } from "react";
+
 import { Navbar, Footer } from "@/components/layout";
 import { Container, Card, Badge, Button, Skeleton } from "@/components/ui";
 import { WalletButton } from "@/components/wallet";
@@ -12,22 +14,17 @@ import { stellarExpertTxUrl } from "@/lib/stellar";
 import { getCoverageIcon, getCoverageColor } from "@/lib/coverage/metadata";
 import type { Policy } from "@/lib/api/policies";
 import type { ClaimRecord } from "@/lib/api/claims";
+import {
+  claimsByPolicyId,
+  policyStatus,
+  summarizePortfolio,
+  type PolicyStatus,
+} from "@/lib/portfolio/selectors";
 
 const COVERAGE_ICONS = ["🪙", "📉", "🛡️", "🔐", "✈️"];
 const COVERAGE_COLORS = ["#8b5cf6", "#f59e0b", "#10b981", "#ef4444", "#06b6d4"];
 const PAGE_SIZE = 10;
 
-type PolicyStatus = "active" | "paid" | "expired";
-
-function policyStatus(policy: Policy, claims: ClaimRecord[], claimsLoading: boolean): PolicyStatus {
-  const claim = claims.find((c) => c.policyId === policy.id);
-  if (claim?.triggered) return "paid";
-  if (claimsLoading) return policy.isActive ? "active" : "expired";
-  return policy.isActive ? "active" : "expired";
-}
-
-const STATUS_BADGE: Record<PolicyStatus, { tone: "safe" | "violet" | "neutral"; label: string }> = {
-  active: { tone: "safe"
 type PolicyStatus = "active" | "paid" | "expired";
 
 function policyStatus(policy: Policy, claims: ClaimRecord[], claimsLoading: boolean): PolicyStatus {
@@ -47,6 +44,17 @@ export default function DashboardPage() {
   const wallet = useWallet();
   const address = wallet.status === "connected" ? wallet.address : null;
   const { data: policies, loading, error, source } = useHolderPolicies(address);
+  const { data: claims, lo
+const STATUS_BADGE: Record<PolicyStatus, { tone: "safe" | "violet" | "neutral"; label: string }> = {
+  active: { tone: "safe", label: "Active" },
+  paid: { tone: "violet", label: "Paid Out" },
+  expired: { tone: "neutral", label: "Expired" },
+};
+
+export default function DashboardPage() {
+  const wallet = useWallet();
+  const address = wallet.status === "connected" ? wallet.address : null;
+  const { data: policies, loading, error, source } = useHolderPolicies(address);
   const { data: claims, loading: claimsLoading, error: claimsError } = useClaims(address, policies);
 
   const policyList = policies ?? [];
@@ -54,14 +62,18 @@ export default function DashboardPage() {
   const policiesPagination = usePagination(policyList, PAGE_SIZE);
   const claimsPagination = usePagination(claimList, PAGE_SIZE);
 
-  const summary = policies
-    ? {
-        active: policies.filter((p) => policyStatus(p, claims, claimsLoading) === "active").length,
-        totalCoverage: policies.reduce((sum, p) => sum + fromStroops(p.coverageAmount), 0),
-        totalPremiums: policies.reduce((sum, p) => sum + fromStroops(p.premium), 0),
-        totalPayouts: claims.filter((c) => c.triggered).reduce((sum, c) => sum + fromStroops(c.payout), 0),
-      }
-    : null;
+  const claimsIndex = useMemo(() => claimsByPolicyId(claims), [claims]);
+
+  const summary = useMemo(
+    () =>
+      policies
+        ? summarizePortfolio(policies, claims, {
+            policiesFixture: isFixture,
+            claimsFixture: isFixture,
+          })
+        : null,
+    [policies, claims, isFixture],
+  );
 
   const summaryLoading = loading || claimsLoading || !summary;
 
@@ -86,6 +98,12 @@ export default function DashboardPage() {
             {source === "fixture-demo" && (
               <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-pm-amber">
                 ⚠ Showing demo fixture data — demo mode is enabled for this address.
+              </p>
+            )}
+            {summary?.provenance === "mixed" && (
+              <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-pm-amber">
+                ⚠ Mixed data — policies and claims come from different sources, so totals may be
+                incomplete.
               </p>
             )}
           </div>
@@ -230,7 +248,6 @@ export default function DashboardPage() {
                 <h2 id="claims-heading" className="mb-4 font-display text-lg font-bold tracking-tight text-pm-text">
                   Claim History
                 </h2>
-
                 {claimsError && (
                   <Card className="border-pm-red/30 !bg-pm-red/[0.04]">
                     <p className="text-sm text-pm-red">Couldn&apos;t load claims: {claimsError}</p>
@@ -260,6 +277,14 @@ export default function DashboardPage() {
                             <div className="mb-0.5 flex items-center gap-2">
                               <span className="text-sm font-semibold text-pm-text">
                                 Claim #{claim.id}
+                              </span>
+                              <Badge tone={claim.triggered ? "violet" : "neutral"}>
+                                {claim.triggered ? "Paid Out" : "Pending"}
+                              </Badge>
+                            </div>
+                            <div className="text-xs text-pm-text/45">
+                              Policy {claim.policyId} · {formatUsd(Number(claim.payout) / 1e7, { maximumFractionDigits: 0 })}
+                            </div>
                               </span>
                               <Badge tone={claim.triggered ? "violet" : "neutral"}>
                                 {claim.triggered ? "Paid Out" : "Pending"}

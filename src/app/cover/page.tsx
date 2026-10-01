@@ -51,6 +51,7 @@ export default function CoverPage() {
   const [coverageAmount, setCoverageAmount] = useState("5000");
   const [durationDays, setDurationDays] = useState(30);
   const [flightNumber, setFlightNumber] = useState("");
+  const [connectError, setConnectError] = useState<string | null>(null);
   const [submission, setSubmission] = useState<
     | { status: "idle" }
     | { status: "submitting" }
@@ -59,6 +60,7 @@ export default function CoverPage() {
     | { status: "error"; message: string }
   >({ status: "idle" });
   const radioRefs = useRef<Record<number, HTMLButtonElement | null>>({});
+  const buyButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const ct = coverageTypes?.find((t) => t.id === selectedType);
   const meta = coverageMeta(ct?.id ?? selectedType);
@@ -117,10 +119,20 @@ export default function CoverPage() {
 
   async function handleBuy() {
     if (!ct) return;
-    if (wallet.status !== "connected" || !wallet.address) {
-      await wallet.connect();
-      return;
+    setConnectError(null);
+
+    let address = wallet.address;
+    if (wallet.status !== "connected" || !address) {
+      const connected = await wallet.connect();
+      if (!connected) {
+        setConnectError("Wallet connection failed or was declined. Please try again.");
+        buyButtonRef.current?.focus();
+        return;
+      }
+      address = connected;
     }
+
+    // Re-validate against the (possibly newly connected) session before acting.
     if (amountInvalid || flightNumberInvalid) return;
 
     // Capacity can change between page load and submit — re-check against
@@ -141,7 +153,7 @@ export default function CoverPage() {
     setSubmission({ status: "submitting" });
     try {
       const result = await buyPolicy({
-        holder: wallet.address,
+        holder: address,
         coverageType: ct.id,
         coverageAmount: toStroops(parseFloat(coverageAmount)),
         durationDays,
@@ -152,7 +164,7 @@ export default function CoverPage() {
       if (!wallet.networkPassphrase) {
         throw new Error("Wallet network isn't available — reconnect and try again");
       }
-      const txHash = await signAndSubmit(result.txXdr, wallet.address, wallet.networkPassphrase);
+      const txHash = await signAndSubmit(result.txXdr, address, wallet.networkPassphrase);
       setSubmission({ status: "success", result, demo: false, txHash });
     } catch (err) {
       if (err instanceof ApiUnreachableError) {
@@ -162,7 +174,7 @@ export default function CoverPage() {
         const demoResult: BuyPolicyResponse = {
           policy: {
             id: `demo-${crypto.randomUUID()}`,
-            holder: wallet.address,
+            holder: address,
             coverageType: ct.id,
             coverageTypeName: ct.name,
             coverageAmount: toStroops(parseFloat(coverageAmount)),
@@ -250,7 +262,6 @@ export default function CoverPage() {
                     {coverageTypes.map((t) => {
                       const tMeta = coverageMeta(t.id);
                       const selected = t.id === selectedType;
-                      const selected = t.id === selectedType;
                       return (
                         <button
                           key={t.id}
@@ -262,19 +273,21 @@ export default function CoverPage() {
                           aria-checked={selected}
                           tabIndex={selected ? 0 : -1}
                           onClick={() => setSelectedType(t.id)}
-                          className={`flex items-center gap-3 rounded-lg border px-4 py-3 text-left transition-colors ${
+                          className={`flex w-full items-center justify-between rounded-xl border px-4 py-3.5 text-left transition-colors ${
                             selected
                               ? "border-pm-violet/60 bg-pm-violet/[0.08]"
-                              : "border-pm-border bg-pm-surface hover:border-pm-violet/30"
+                              : "border-pm-border bg-pm-surface hover:border-pm-border/80"
                           }`}
                         >
-                          <span aria-hidden="true" className="text-xl">
-                            {tMeta.icon}
-                          </span>
-                          <span className="flex-1">
-                            <span className="block text-sm font-semibold text-pm-text">{t.name}</span>
-                            <span className="block text-[11px] text-pm-text/45">{tMeta.triggerSummary}</span>
-                          </span>
+                          <div className="flex items-center gap-3">
+                            <span aria-hidden="true" className="text-xl">
+                              {tMeta.icon}
+                            </span>
+                            <div>
+                              <div className="text-sm font-semibold text-pm-text">{t.name}</div>
+                              <div className="text-[11px] text-pm-text/40">{tMeta.triggerSummary}</div>
+                            </div>
+                          </div>
                           <Badge
                             style={{ color: RISK_LEVEL_COLORS[tMeta.riskLevel] }}
                             className="!border-current/30"
@@ -288,146 +301,162 @@ export default function CoverPage() {
                 )}
               </div>
 
-              {ct && (
-                <Card>
-                  <div className="mb-3 text-[11px] uppercase tracking-wide text-pm-text/40">2. Configure</div>
+              <div>
+                <div className="mb-3 text-[11px] uppercase tracking-wide text-pm-text/40">2. Coverage Amount</div>
+                <Input
+                  label="Amount (USDC)"
+                  type="number"
+                  min={effectiveMin}
+                  max={effectiveMax}
+                  value={coverageAmount}
+                  onChange={(e) => setCoverageAmount(e.target.value)}
+                  error={
+                    amountInvalid
+                      ? `Amount must be between ${formatUsd(effectiveMin)} and ${formatUsd(effectiveMax)}`
+                      : undefined
+                  }
+                />
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {QUICK_AMOUNTS.map((amt) => (
+                    <button
+                      key={amt}
+                      type="button"
+                      onClick={() => setCoverageAmount(String(amt))}
+                      className="rounded-lg border border-pm-border px-2.5 py-1 text-[11px] text-pm-text/60 transition-colors hover:border-pm-violet/50 hover:text-pm-text"
+                    >
+                      {formatUsd(amt)}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-                  <label className="mb-1.5 block text-xs font-medium text-pm-text/60" htmlFor="coverage-amount">
-                    Coverage amount (USDC)
-                  </label>
+              <div>
+                <div className="mb-3 text-[11px] uppercase tracking-wide text-pm-text/40">3. Duration</div>
+                <div className="flex flex-wrap gap-2">
+                  {[7, 14, 30, 90].map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setDurationDays(d)}
+                      className={`rounded-lg border px-3 py-1.5 text-xs transition-colors ${
+                        durationDays === d
+                          ? "border-pm-violet/60 bg-pm-violet/[0.08] text-pm-text"
+                          : "border-pm-border text-pm-text/60 hover:border-pm-border/80"
+                      }`}
+                    >
+                      {d} days
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {isFlightDelay && (
+                <div>
+                  <div className="mb-3 text-[11px] uppercase tracking-wide text-pm-text/40">4. Flight Number</div>
                   <Input
-                    id="coverage-amount"
-                    type="number"
-                    min={effectiveMin}
-                    max={effectiveMax}
-                    value={coverageAmount}
-                    onChange={(e) => setCoverageAmount(e.target.value)}
-                    aria-invalid={amountInvalid}
-                    aria-describedby={amountError ? "coverage-amount-error" : undefined}
+                    label="Flight number"
+                    placeholder="e.g. AA1234"
+                    value={flightNumber}
+                    onChange={(e) => setFlightNumber(e.target.value)}
+                    error={flightNumberInvalid ? "Flight number is required for flight delay coverage" : undefined}
                   />
-                  {amountError && (
-                    <p id="coverage-amount-error" className="mt-1.5 text-[11px] text-pm-red">
-                      {amountError}
-                    </p>
-                  )}
-
-                  <div className="mt-2.5 flex flex-wrap gap-2">
-                    {QUICK_AMOUNTS.map((quick) => {
-                      const disabled = quick > effectiveMax;
-                      return (
-                        <button
-                          key={quick}
-                          type="button"
-                          disabled={disabled}
-                          onClick={() => setCoverageAmount(String(quick))}
-                          className={`rounded-lg border px-2.5 py-1 text-[11px] transition-colors ${
-                            disabled
-                              ? "cursor-not-allowed border-pm-border/50 text-pm-text/25"
-                              : "border-pm-border text-pm-text/60 hover:border-pm-violet/50 hover:text-pm-text"
-                          }`}
-                        >
-                          {formatUsd(quick)}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  <label className="mb-1.5 mt-4 block text-xs font-medium text-pm-text/60" htmlFor="duration-days">
-                    Duration (days)
-                  </label>
-                  <Input
-                    id="duration-days"
-                    type="number"
-                    min={1}
-                    max={365}
-                    value={durationDays}
-                    onChange={(e) => setDurationDays(Math.max(1, Math.min(365, parseInt(e.target.value) || 1)))}
-                  />
-
-                  {isFlightDelay && (
-                    <>
-                      <label className="mb-1.5 mt-4 block text-xs font-medium text-pm-text/60" htmlFor="flight-number">
-                        Flight number
-                      </label>
-                      <Input
-                        id="flight-number"
-                        value={flightNumber}
-                        onChange={(e) => setFlightNumber(e.target.value)}
-                        placeholder="e.g. AA100"
-                        aria-invalid={flightNumberInvalid}
-                      />
-                      {flightNumberInvalid && (
-                        <p className="mt-1.5 text-[11px] text-pm-red">Enter the flight number to monitor.</p>
-                      )}
-                    </>
-                  )}
-                </Card>
+                </div>
               )}
             </div>
 
-            {/* Right: Quote panel */}
+            {/* Right: Summary + buy */}
             <Card className="lg:sticky lg:top-6">
-              <div className="mb-3 text-[11px] uppercase tracking-wide text-pm-text/40">Quote</div>
+              <div className="mb-4 text-[11px] uppercase tracking-wide text-pm-text/40">Summary</div>
 
               {ct ? (
-                <div className="flex flex-col gap-2.5 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-pm-text/50">Coverage</span>
-                    <span className="font-semibold text-pm-text">{formatUsd(parseFloat(coverageAmount) || 0)}</span>
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-pm-text/50">Coverage type</span>
+                    <span className="font-medium text-pm-text">{ct.name}</span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-pm-text/50">Premium</span>
-                    <span className="font-semibold text-pm-text">{formatUsd(premium)}</span>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-pm-text/50">Coverage amount</span>
+                    <span className="font-medium text-pm-text">{formatUsd(parseFloat(coverageAmount) || 0)}</span>
                   </div>
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-pm-text/50">Duration</span>
+                    <span className="font-medium text-pm-text">{durationDays} days</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
                     <span className="text-pm-text/50">Expires</span>
-                    <span className="text-pm-text/80">{expiryDate}</span>
+                    <span className="font-medium text-pm-text">{expiryDate}</span>
+                  </div>
+                  <div className="my-1 h-px bg-pm-border" />
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-pm-text/50">Premium</span>
+                    <span className="font-display text-lg font-bold text-pm-text">{formatUsd(premium)}</span>
                   </div>
 
-                  <div className="mt-1 border-t border-pm-border pt-2.5">
-                    {poolLoading ? (
-                      <p className="text-[11px] text-pm-text/40">Checking pool capacity…</p>
-                    ) : capacity ? (
-                      <p className="text-[11px] text-pm-text/50">
-                        Pool can back up to{" "}
-                        <span className="font-semibold text-pm-text/80">{formatUsd(capacity.maxCoverage)}</span>{" "}
-                        of coverage right now.
-                      </p>
-                    ) : (
-                      <p className="text-[11px] text-pm-amber">
-                        Pool capacity couldn&apos;t be verified{poolError ? ` (${poolError})` : ""} — the amount
-                        limit shown may not reflect what the pool can actually back.
-                      </p>
-                    )}
+                  <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-pm-border">
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${RISK_HEAT[ct.riskLevel] ?? 50}%`,
+                        backgroundColor: RISK_TAG_COLORS[ct.riskLevel] ?? "#8b5cf6",
+                      }}
+                    />
                   </div>
-
-                  <Button
-                    className="mt-2"
-                    onClick={handleBuy}
-                    disabled={submission.status === "submitting" || submission.status === "signing"}
-                  >
-                    {wallet.status !== "connected"
-                      ? "Connect Wallet"
-                      : submission.status === "submitting"
-                        ? "Building transaction…"
-                        : submission.status === "signing"
-                          ? "Awaiting signature…"
-                          : "Buy Coverage"}
-                  </Button>
-
-                  {submission.status === "error" && (
-                    <p className="text-[11px] text-pm-red">{submission.message}</p>
-                  )}
-                  {submission.status === "success" && (
-                    <p className="text-[11px] text-pm-green">
-                      {submission.demo ? "Simulated locally (demo)." : "Coverage purchased."}
-                      {submission.txHash ? ` ${truncateAddress(submission.txHash)}` : ""}
-                    </p>
-                  )}
                 </div>
               ) : (
-                <p className="text-sm text-pm-text/40">Select a coverage type to see your quote.</p>
+                <p className="text-sm text-pm-text/40">Select a coverage type to see your premium.</p>
               )}
+
+              <div className="mt-5">
+                <Button
+                  ref={buyButtonRef}
+                  className="w-full"
+                  onClick={handleBuy}
+                  disabled={
+                    !ct ||
+                    submission.status === "submitting" ||
+                    submission.status === "signing" ||
+                    wallet.status === "connecting"
+                  }
+                  loading={
+                    submission.status === "submitting" ||
+                    submission.status === "signing" ||
+                    wallet.status === "connecting"
+                  }
+                >
+                  {wallet.status === "connected" ? "Buy Coverage" : "Connect to Continue"}
+                </Button>
+
+                {connectError && (
+                  <p role="alert" className="mt-2 text-xs text-pm-red">
+                    {connectError}
+                  </p>
+                )}
+
+                {submission.status === "error" && (
+                  <p role="alert" className="mt-2 text-xs text-pm-red">
+                    {submission.message}
+                  </p>
+                )}
+
+                {submission.status === "success" && (
+                  <div className="mt-3 rounded-lg border border-pm-green/30 bg-pm-green/[0.06] p-3">
+                    <p className="text-xs text-pm-green">
+                      {submission.demo
+                        ? "Simulated purchase — no on-chain transaction was submitted."
+                        : "Coverage purchased successfully."}
+                    </p>
+                    {submission.txHash && (
+                      <p className="mt-1 break-all text-[11px] text-pm-text/40">tx: {submission.txHash}</p>
+                    )}
+                  </div>
+                )}
+
+                {wallet.status === "connected" && wallet.address && (
+                  <p className="mt-2 text-center text-[11px] text-pm-text/40">
+                    Buying as {truncateAddress(wallet.address)}
+                  </p>
+                )}
+              </div>
             </Card>
           </div>
         </Container>
