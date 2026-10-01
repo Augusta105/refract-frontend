@@ -1,8 +1,8 @@
-"use client";
+import { Meter } from "@/components/ui";
 
 import { useMemo, useRef, useState } from "react";
 import { Navbar, Footer } from "@/components/layout";
-import { Container, Card, Badge, Input, Button, Skeleton } from "@/components/ui";
+import { Container, Card, Badge, Input, Button, Skeleton, Meter } from "@/components/ui";
 import { WalletButton } from "@/components/wallet";
 import { useWallet } from "@/lib/wallet/WalletProvider";
 import { useCoverageTypes } from "@/hooks/useCoverageTypes";
@@ -392,15 +392,22 @@ export default function CoverPage() {
                     <span className="font-display text-lg font-bold text-pm-text">{formatUsd(premium)}</span>
                   </div>
 
-                  <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-pm-border">
-                    <div
-                      className="h-full rounded-full"
-                      style={{
-                        width: `${RISK_HEAT[ct.riskLevel] ?? 50}%`,
-                        backgroundColor: RISK_TAG_COLORS[ct.riskLevel] ?? "#8b5cf6",
-                      }}
-                    />
-                  </div>
+                  {/* Replaces the hand-rolled risk-heat bar (previously lines 386-394). */}
+                  <Meter
+                    label="Risk heat"
+                    value={RISK_HEAT[ct.riskLevel]}
+                    min={0}
+                    max={100}
+                    tone={
+                      ct.riskLevel === "high"
+                        ? "danger"
+                        : ct.riskLevel === "medium"
+                          ? "warning"
+                          : "safe"
+                    }
+                    valueText={`${RISK_HEAT[ct.riskLevel]}%`}
+                    showValue
+                  />
                 </div>
               ) : (
                 <p className="text-sm text-pm-text/40">Select a coverage type to see your premium.</p>

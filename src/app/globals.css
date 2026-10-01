@@ -5,25 +5,11 @@
 @tailwind utilities;
 
 /* ── Refract Design Tokens ─────────────────────────────────────────────────── */
-/*
- * globals.css is the single authoritative source of truth for every colour and
- * radius token. tailwind.config.ts references these custom properties (e.g.
- * `pm-border: "var(--pm-border)"`) instead of hardcoding values, so a token can
- * never drift between the two files. `npm run tokens:check` enforces this.
- *
- * Colour tokens are stored as space-separated RGB channel triplets so Tailwind
- * can compose opacity modifiers (`border-pm-border/60`) via the
- * `<alpha-value>` placeholder. Always consume them through `rgb(var(--pm-*))`
- * or the Tailwind utilities — never as a bare `var(--pm-*)` colour.
- */
-:root {
-  /* Backgrounds */
-  --pm-bg:        7 5 15;
-  --pm-surface:   15 12 26;
-  --pm-surface-2: 23 19 42;
-  --pm-surface-3: 32 27 56;
-  --pm-border:    139 92 246;
-  --pm-border-2:  139 92 246;
+  --pm-text:    237 233 248;
+  --pm-muted:   123 111 168;
+  --pm-muted-2: 74 64 112;
+
+  /* Alph
 
   /* Brand — violet */
   --pm-violet:     139 92 246;
@@ -320,6 +306,28 @@ input:focus-visible,
   background: rgb(var(--pm-violet));
   color: #fff;
   padding: 10px 18px;
+  border-radius: var(--pm-r);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: top 0.15s ease;
+}
+.pm-skip-link:focus {
+  top: 16px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Loading skeleton ────────────────────────────────────────────────────── */
+
+x 18px;
   border-radius: var(--pm-r);
   font-size: 13px;
   font-weight: 600;
