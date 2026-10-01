@@ -1,3 +1,12 @@
+/** Shared number/currency formatting helpers used across pages. */
+
+import { usePreferencesStore } from "@/lib/store/preferencesStore";
+
+/**
+ * Number of decimal places USDC supports (7-decimal base units / stroops).
+ */
+export const USDC_DECIMALS = 7;
+
 /**
  * Parse a user-entered amount string into a finite number.
  *
@@ -22,6 +31,70 @@ export function parseAmount(input: string | null | undefined): number | null {
 export function toStroops(amount: number): bigint {
   if (!Number.isFinite(amount)) {
     throw new TypeError(`toStroops: expected a finite number, received ${amount}`);
+  }
+  return BigInt(Math.round(amount * 10 ** USDC_DECIMALS));
+}
+
+/**
+ * Minimum deposit accepted by the protocol, in USDC.
+ *
+ * Documented here so both the deposit form and any future callers share a
+ * single source of truth for the protocol floor.
+ */
+export const MIN_DEPOSIT_USDC = 1;
+
+/** Converts a base-unit string (1e7 per USDC) back to a human float. */
+export function fromStroops(value: string | number): number {
+  return Number(value) / 10 ** USDC_DECIMALS;
+}
+
+/**
+ * Resolves the locale used for display formatting. Falls back to "en-US"
+ * (today's behaviour) when the store is unavailable, e.g. during SSR or
+ * before the persisted preferences have hydrated.
+ */
+function resolveLocale(): string {
+  try {
+    return usePreferencesStore.getState().locale || "en-US";
+  } catch {
+    return "en-US";
+  }
+}
+
+export function formatUsd(value: number, opts: Intl.NumberFormatOptions = {}): string {
+  return value.toLocaleString(resolveLocale(), {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    ...opts,
+  });
+}
+
+export function formatCompactUsd(value: number): string {
+  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `$${(value / 1_000).toFixed(1)}K`;
+  return formatUsd(value);
+}
+
+/** Renders a past timestamp (ms since epoch) as "3 days ago", "2 weeks ago", etc. */
+export function formatRelativeTime(timestampMs: number): string {
+  const seconds = Math.max(0, Math.floor((Date.now() - timestampMs) / 1000));
+  const units: [string, number][] = [
+    ["year", 31_536_000],
+    ["month", 2_592_000],
+    ["week", 604_800],
+    ["day", 86_400],
+    ["hour", 3_600],
+    ["minute", 60],
+  ];
+  for (const [unit, secondsInUnit] of units) {
+    const count = Math.floor(seconds / secondsInUnit);
+    if (count >= 1) return `${count} ${unit}${count === 1 ? "" : "s"} ago`;
+  }
+  return "just now";
+}
+
   }
   return BigInt(Math.round(amount * 10 ** 7));
 }
