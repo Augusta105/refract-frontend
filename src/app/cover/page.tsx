@@ -1,8 +1,6 @@
-import { Meter } from "@/components/ui";
-
 import { useMemo, useRef, useState } from "react";
 import { Navbar, Footer } from "@/components/layout";
-import { Container, Card, Badge, Input, Button, Skeleton, Meter } from "@/components/ui";
+import { Container, Card, Badge, Input, Button, Skeleton, Meter, Slider } from "@/components/ui";
 import { WalletButton } from "@/components/wallet";
 import { useWallet } from "@/lib/wallet/WalletProvider";
 import { useCoverageTypes } from "@/hooks/useCoverageTypes";
@@ -332,22 +330,17 @@ export default function CoverPage() {
 
               <div>
                 <div className="mb-3 text-[11px] uppercase tracking-wide text-pm-text/40">3. Duration</div>
-                <div className="flex flex-wrap gap-2">
-                  {[7, 14, 30, 90].map((d) => (
-                    <button
-                      key={d}
-                      type="button"
-                      onClick={() => setDurationDays(d)}
-                      className={`rounded-lg border px-3 py-1.5 text-xs transition-colors ${
-                        durationDays === d
-                          ? "border-pm-violet/60 bg-pm-violet/[0.08] text-pm-text"
-                          : "border-pm-border text-pm-text/60 hover:border-pm-border/80"
-                      }`}
-                    >
-                      {d} days
-                    </button>
-                  ))}
-                </div>
+                <Slider
+                  label="Coverage duration"
+                  value={durationDays}
+                  onChange={setDurationDays}
+                  min={1}
+                  max={365}
+                  step={1}
+                  presets={[30, 60, 90, 365]}
+                  formatValue={(days) => `${days} day${days === 1 ? "" : "s"}`}
+                  hint="How long your cover lasts."
+                />
               </div>
 
               {isFlightDelay && (

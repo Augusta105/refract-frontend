@@ -25,3 +25,6 @@ export { Slider } from "./Slider";
 export type { SliderProps } from "./Slider";
 export { Dialog } from "./Dialog";
 export type { DialogProps, DialogSize } from "./Dialog";
+export { Alert } from "./Alert";
+export type { AlertTone } from "./Alert";
+export { FixtureNotice } from "./FixtureNotice";

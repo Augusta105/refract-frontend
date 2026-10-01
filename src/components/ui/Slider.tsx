@@ -11,20 +11,47 @@ import {
 } from "react";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 
+/**
+ * A single-thumb range slider primitive.
+ *
+ * Wraps a native `<input type="range">` so it stays keyboard operable
+ * (arrows, PageUp/PageDown, Home/End) while adding labelling, preset
+ * "chip" stops, a formatted value readout and cross-browser thumb styling.
+ *
+ * @example
+ * <Slider
+ *   label="Coverage duration"
+ *   value={days}
+ *   onChange={setDays}
+ *   min={1}
+ *   max={365}
+ *   presets={[30, 60, 90, 365]}
+ *   formatValue={(v) => `${v} day${v === 1 ? "" : "s"}`}
+ *   hint="How long your cover lasts."
+ * />
+ */
 export interface SliderProps {
+  label?: string;
+  value: number;
+  onChange: (value: number) => void;
   min?: number;
   max?: number;
   step?: number;
-  value: number;
-  onChange: (value: number) => void;
+  /** Discrete stops rendered as keyboard-reachable chips. */
+  presets?: number[];
+  /** Formats the value for the readout and `aria-valuetext`. */
   formatValue?: (value: number) => string;
-  label?: string;
-  id?: string;
+  hint?: string;
+  error?: string;
   disabled?: boolean;
+  id?: string;
   className?: string;
 }
 
-function clamp(value: number, min: number, max: number): number {
+const defaultFormat = (value: number) => String(value);
+
+/** Clamp a value into the inclusive `[min, max]` range. */
+function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
@@ -35,33 +62,39 @@ function roundToStep(value: number, min: number, step: number): number {
 }
 
 /**
- * Reusable, ARIA-compliant single-thumb slider built on a native
- * `<input type="range">`. Native input provides keyboard operation
- * (arrows, Home/End, Page Up/Down) and screen reader semantics for free;
- * we layer on a floating value tooltip and the CSS-variable fill trick.
+ * Slider primitive with ticks, presets and cross-browser thumb styling.
  */
 export function Slider({
+  label,
+  value,
+  onChange,
   min = 0,
   max = 100,
   step = 1,
-  value,
-  onChange,
-  formatValue,
-  label,
-  id,
+  presets,
+  formatValue = defaultFormat,
+  hint,
+  error,
   disabled = false,
+  id,
   className,
 }: SliderProps) {
   const generatedId = useId();
-  const inputId = id ?? generatedId;
+  const inputId = id ?? `slider-${generatedId}`;
+  const hintId = `${inputId}-hint`;
+  const errorId = `${inputId}-error`;
+
+  const safeValue = clamp(value, min, max);
+  const pct = max === min ? 0 : ((safeValue - min) / (max - min)) * 100;
+  const valueText = formatValue(safeValue);
+
+  const describedBy =
+    [error ? errorId : null, hint ? hintId : null].filter(Boolean).join(" ") ||
+    undefined;
+
   const prefersReducedMotion = usePrefersReducedMotion();
   const [active, setActive] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  const safeValue = clamp(value, min, max);
-  const range = max - min;
-  const pct = range > 0 ? ((safeValue - min) / range) * 100 : 0;
-  const display = formatValue ? formatValue(safeValue) : String(safeValue);
 
   const commit = useCallback(
     (next: number) => {
@@ -123,12 +156,25 @@ export function Slider({
   const showTooltip = active && !disabled;
 
   return (
-    <div className={["pm-slider-wrap", className].filter(Boolean).join(" ")}>
+    <div className={["pm-slider-field", className].filter(Boolean).join(" ")}>
+      <div className="pm-slider-field__header">
+        <label className="pm-slider-field__label" htmlFor={inputId}>
+          {label}
+        </label>
+        <output
+          className="pm-slider-field__value"
+          htmlFor={inputId}
+          aria-live="polite"
+        >
+          {valueText}
+        </output>
+      </div>
+
       <input
         ref={inputRef}
         id={inputId}
-        type="range"
         className="pm-slider"
+        type="range"
         min={min}
         max={max}
         step={step}
@@ -139,6 +185,8 @@ export function Slider({
         aria-valuemax={max}
         aria-valuenow={safeValue}
         aria-valuetext={display}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy}
         style={{ ["--pct" as string]: `${pct}%` }}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
@@ -155,6 +203,37 @@ export function Slider({
       >
         {display}
       </span>
+
+      {presets && presets.length > 0 ? (
+        <div className="pm-slider-field__presets" role="group" aria-label={`${label} presets`}>
+          {presets.map((preset) => {
+            const presetValue = clamp(preset, min, max);
+            const active = presetValue === safeValue;
+            return (
+              <button
+                key={preset}
+                type="button"
+                className="pm-slider-field__preset"
+                aria-pressed={active}
+                disabled={disabled}
+                onClick={() => onChange(presetValue)}
+              >
+                {formatValue(presetValue)}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
+      {error ? (
+        <p id={errorId} className="pm-slider-field__error" role="alert">
+          {error}
+        </p>
+      ) : hint ? (
+        <p id={hintId} className="pm-slider-field__hint">
+          {hint}
+        </p>
+      ) : null}
     </div>
   );
 }
