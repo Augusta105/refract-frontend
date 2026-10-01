@@ -1,4 +1,8 @@
-import { useMemo, useRef, useState } from "react";
+"use client";
+
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Navbar, Footer } from "@/components/layout";
 import { Container, Card, Badge, Input, Button, Skeleton, Meter, Slider } from "@/components/ui";
 import { WalletButton } from "@/components/wallet";
@@ -12,6 +16,7 @@ import { ApiUnreachableError } from "@/lib/api/client";
 import { formatUsd, toStroops } from "@/lib/format";
 import { truncateAddress } from "@/lib/wallet/WalletProvider";
 import { signAndSubmit } from "@/lib/wallet/signAndSubmit";
+import { calculatePremium, getEffectiveMaxCoverage, getEffectiveMinCoverage } from "@/lib/premium";
 import { coverageMeta, RISK_LEVEL_COLORS } from "@/lib/coverage/metadata";
 
 // Neutral fallbacks for risk levels the backend may introduce before this
@@ -39,7 +44,8 @@ function riskHeat(riskLevel: string | undefined): number {
 
 const QUICK_AMOUNTS = [1_000, 5_000, 10_000, 25_000];
 
-export default function CoverPage() {
+function CoverPageContent() {
+  const searchParams = useSearchParams();
   const wallet = useWallet();
   const { data: coverageTypes, loading: typesLoading, error: typesError, isFixture } = useCoverageTypes();
   const { minCoverage: chainMinCoverage, maxCoverage: chainMaxCoverage } = useCoverageBounds();
@@ -54,20 +60,35 @@ export default function CoverPage() {
     | { status: "idle" }
     | { status: "submitting" }
     | { status: "signing" }
+    | { status: "pending-confirmation"; result: BuyPolicyResponse }
     | { status: "success"; result: BuyPolicyResponse; demo: boolean; txHash?: string }
     | { status: "error"; message: string }
   >({ status: "idle" });
   const radioRefs = useRef<Record<number, HTMLButtonElement | null>>({});
   const buyButtonRef = useRef<HTMLButtonElement | null>(null);
 
+  useEffect(() => {
+    const typeParam = searchParams.get("type");
+    const amountParam = searchParams.get("amount");
+    const durationParam = searchParams.get("duration");
+
+    if (typeParam !== null && !isNaN(Number(typeParam))) {
+      setSelectedType(Number(typeParam));
+    }
+    if (amountParam && !isNaN(Number(amountParam))) {
+      setCoverageAmount(amountParam);
+    }
+    if (durationParam && !isNaN(Number(durationParam))) {
+      setDurationDays(Number(durationParam));
+    }
+  }, [searchParams]);
+
   const ct = coverageTypes?.find((t) => t.id === selectedType);
   const meta = coverageMeta(ct?.id ?? selectedType);
 
   const premium = useMemo(() => {
     if (!ct) return 0;
-    const amount = parseFloat(coverageAmount) || 0;
-    const annualRate = ct.baseRatePct / 100;
-    return amount * annualRate * (durationDays / 365);
+    return calculatePremium(coverageAmount, ct.baseRatePct, durationDays);
   }, [coverageAmount, durationDays, ct]);
 
   const expiryDate = new Date(Date.now() + durationDays * 86400000).toLocaleDateString("en-US", {
@@ -162,7 +183,14 @@ export default function CoverPage() {
       if (!wallet.networkPassphrase) {
         throw new Error("Wallet network isn't available — reconnect and try again");
       }
-      const txHash = await signAndSubmit(result.txXdr, address, wallet.networkPassphrase);
+      const txHash = await signAndSubmit(
+        result.txXdr,
+        address,
+        wallet.networkPassphrase,
+        () => {
+          setSubmission({ status: "pending-confirmation", result });
+        }
+      );
       setSubmission({ status: "success", result, demo: false, txHash });
     } catch (err) {
       if (err instanceof ApiUnreachableError) {
@@ -201,18 +229,28 @@ export default function CoverPage() {
 
       <main id="main-content">
         <Container className="py-9 sm:py-10">
-          <div className="mb-8">
-            <h1 className="mb-2 font-display text-[26px] font-extrabold tracking-tight text-pm-text sm:text-[28px]">
-              Get Coverage
-            </h1>
-            <p className="text-sm text-pm-text/45">
-              Choose your coverage type, set amount and duration. Premium paid once. Payout automatic.
-            </p>
-            {isFixture && (
-              <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-pm-amber">
-                ⚠ Showing fixture data — the Refract API isn&apos;t reachable from this environment.
+          <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="mb-2 font-display text-[26px] font-extrabold tracking-tight text-pm-text sm:text-[28px]">
+                Get Coverage
+              </h1>
+              <p className="text-sm text-pm-text/45">
+                Choose your coverage type, set amount and duration. Premium paid once. Payout automatic.
               </p>
-            )}
+              {isFixture && (
+                <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-pm-amber">
+                  ⚠ Showing fixture data — the Refract API isn&apos;t reachable from this environment.
+                </p>
+              )}
+            </div>
+
+            <div>
+              <Link href="/cover/compare">
+                <Button variant="outline" size="sm">
+                  Compare Plans Side-by-Side →
+                </Button>
+              </Link>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1fr_360px]">
@@ -466,3 +504,12 @@ export default function CoverPage() {
     </div>
   );
 }
+
+export default function CoverPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-pm-bg" />}>
+      <CoverPageContent />
+    </Suspense>
+  );
+}
+
